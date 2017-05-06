@@ -1,0 +1,37 @@
+{
+  "name": "serin",
+  "version": "2.9.2100",
+  "description": "Initializes a new Serenity project using Serene ASP.NET Core template",
+  "preferGlobal": true,
+  "dependencies": {
+    "xml2js": "~0.4.17",
+    "decompress": "^4.0.0"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/volkanceylan/serenity.git"
+  },
+  "keywords": [
+    "Serene",
+    "Serenity",
+    "Business Application",
+    "ASP.NET",
+    "ASP.NET Core",
+    "CoreFX",
+    "DotNet",
+    "Template"
+  ],
+  "author": "Volkan Ceylan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/volkanceylan/serenity/issues"
+  },
+  "homepage": "https://github.com/volkanceylan/serenity#readme",
+  "bin": {
+    "serin": "./index.js"
+  },
+  "files": [
+    "index.js"
+  ]
+}

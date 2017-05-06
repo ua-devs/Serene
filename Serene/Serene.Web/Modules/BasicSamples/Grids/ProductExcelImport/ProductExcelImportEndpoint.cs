@@ -16,7 +16,7 @@ namespace Serene.BasicSamples.Endpoints
     using MyRow = Northwind.Entities.ProductRow;
 
     [RoutePrefix("Services/BasicSamples/ProductExcelImport"), Route("{action}")]
-    [ConnectionKey("Northwind"), ServiceAuthorize]
+    [ConnectionKey(typeof(MyRow)), ServiceAuthorize]
     public class ProductExcelImportController : ServiceEndpoint
     {
         [HttpPost]
@@ -111,7 +111,7 @@ namespace Serene.BasicSamples.Endpoints
 
                     if (product.ProductID == null)
                     {
-                        new ProductRepository().Create(uow, new SaveWithLocalizationRequest<MyRow>
+                        new ProductRepository().Create(uow, new SaveRequest<MyRow>
                         {
                             Entity = product
                         });
@@ -120,7 +120,7 @@ namespace Serene.BasicSamples.Endpoints
                     }
                     else
                     {
-                        new ProductRepository().Update(uow, new SaveWithLocalizationRequest<MyRow>
+                        new ProductRepository().Update(uow, new SaveRequest<MyRow>
                         {
                             Entity = product,
                             EntityId = product.ProductID.Value

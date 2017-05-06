@@ -9,30 +9,25 @@ namespace Serene.Northwind.Endpoints
     using MyRow = Entities.CategoryRow;
 
     [RoutePrefix("Services/Northwind/Category"), Route("{action}")]
-    [ConnectionKey("Northwind"), ServiceAuthorize(Northwind.PermissionKeys.General)]
+    [ConnectionKey(typeof(MyRow)), ServiceAuthorize(typeof(MyRow))]
     public class CategoryController : ServiceEndpoint
     {
-        [HttpPost]
-        public SaveResponse Create(IUnitOfWork uow, SaveWithLocalizationRequest<MyRow> request)
+        [HttpPost, AuthorizeCreate(typeof(MyRow))]
+        public SaveResponse Create(IUnitOfWork uow, SaveRequest<MyRow> request)
         {
             return new MyRepository().Create(uow, request);
         }
 
-        [HttpPost]
-        public SaveResponse Update(IUnitOfWork uow, SaveWithLocalizationRequest<MyRow> request)
+        [HttpPost, AuthorizeUpdate(typeof(MyRow))]
+        public SaveResponse Update(IUnitOfWork uow, SaveRequest<MyRow> request)
         {
             return new MyRepository().Update(uow, request);
         }
 
-        [HttpPost]
+        [HttpPost, AuthorizeDelete(typeof(MyRow))]
         public DeleteResponse Delete(IUnitOfWork uow, DeleteRequest request)
         {
             return new MyRepository().Delete(uow, request);
-        }
-
-        public RetrieveLocalizationResponse<MyRow> RetrieveLocalization(IDbConnection connection, RetrieveLocalizationRequest request)
-        {
-            return new MyRepository().RetrieveLocalization(connection, request);
         }
 
         public RetrieveResponse<MyRow> Retrieve(IDbConnection connection, RetrieveRequest request)

@@ -159,14 +159,32 @@ namespace Serene.Administration.Repositories
             };
         }
 
-        private void ProcessAttributes<TAttr>(HashSet<string> hash, MemberInfo member, Func<TAttr, string> getPermission)
-            where TAttr: Attribute
+        private static readonly string[] emptyPermissions = new string[0];
+        private static readonly char[] splitChar = new char[] { '|', '&' };
+
+        private string[] SplitPermissions(string permission)
         {
-            foreach (var attr in member.GetCustomAttributes<TAttr>())
+            if (string.IsNullOrEmpty(permission))
+                return emptyPermissions;
+
+            return permission.Split(splitChar, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private void ProcessAttributes<TAttr>(HashSet<string> hash,
+                MemberInfo member, Func<TAttr, string> getPermission)
+            where TAttr : Attribute
+        {
+            try
             {
-                var permission = getPermission(attr);
-                if (!permission.IsEmptyOrNull())
-                    hash.Add(permission);
+                foreach (var attr in member.GetCustomAttributes<TAttr>(false))
+                {
+                    var permission = getPermission(attr);
+                    hash.AddRange(SplitPermissions(permission));
+                }
+            }
+            catch
+            {
+                // GetCustomAttributes might fail before .NET 4.6
             }
         }
 
@@ -180,7 +198,7 @@ namespace Serene.Administration.Repositories
                 {
                     foreach (var attr in assembly.GetCustomAttributes<PermissionAttributeBase>())
                         if (!attr.Permission.IsEmptyOrNull())
-                            result.Add(attr.Permission);
+                            result.AddRange(SplitPermissions(attr.Permission));
 
                     foreach (var type in assembly.GetTypes())
                     {
@@ -194,6 +212,10 @@ namespace Serene.Administration.Repositories
                             ProcessAttributes<PermissionAttributeBase>(result, member, x => x.Permission);
                             ProcessAttributes<ServiceAuthorizeAttribute>(result, member, x => x.Permission);
                         }
+
+                        foreach (var member in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                            if (member.GetIndexParameters().Length == 0)
+                                ProcessAttributes<PermissionAttributeBase>(result, member, x => x.Permission);
                     }
                 }
 

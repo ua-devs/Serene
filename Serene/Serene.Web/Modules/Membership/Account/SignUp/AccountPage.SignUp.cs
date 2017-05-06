@@ -20,7 +20,10 @@ namespace Serene.Membership.Pages
         [HttpGet]
         public ActionResult SignUp()
         {
-            return View(MVC.Views.Membership.Account.SignUp.AccountSignUp);
+            if (UseAdminLTELoginBox)
+                return View(MVC.Views.Membership.Account.SignUp.AccountSignUp_AdminLTE);
+            else
+                return View(MVC.Views.Membership.Account.SignUp.AccountSignUp);
         }
 
         [HttpPost, JsonFilter]
@@ -39,7 +42,7 @@ namespace Serene.Membership.Pages
                         UserRow.Fields.Username == request.Email |
                         UserRow.Fields.Email == request.Email))
                 {
-                    throw new ValidationError("EmailInUse", Texts.Validation.CantFindUserWithEmail);
+                    throw new ValidationError("EmailInUse", Texts.Validation.EmailInUse);
                 }
 
                 using (var uow = new UnitOfWork(connection))
@@ -51,18 +54,19 @@ namespace Serene.Membership.Pages
                     var username = request.Email;
 
                     var fld = UserRow.Fields;
-                    var userId = (int)new SqlInsert(fld.TableName)
-                        .Set(fld.Username, username)
-                        .Set(fld.Source, "sign")
-                        .Set(fld.DisplayName, displayName)
-                        .Set(fld.Email, email)
-                        .Set(fld.PasswordHash, hash)
-                        .Set(fld.PasswordSalt, salt)
-                        .Set(fld.IsActive, 0)
-                        .Set(fld.InsertDate, DateTime.Now)
-                        .Set(fld.InsertUserId, 1)
-                        .Set(fld.LastDirectoryUpdate, DateTime.Now)
-                        .ExecuteAndGetID(connection);
+                    var userId = (int)connection.InsertAndGetID(new UserRow
+                    {
+                        Username = username,
+                        Source = "sign",
+                        DisplayName = displayName,
+                        Email = email,
+                        PasswordHash = hash,
+                        PasswordSalt = salt,
+                        IsActive = 0,
+                        InsertDate = DateTime.Now,
+                        InsertUserId = 1,
+                        LastDirectoryUpdate = DateTime.Now
+                    });
 
                     byte[] bytes;
                     using (var ms = new MemoryStream())
@@ -91,26 +95,10 @@ namespace Serene.Membership.Pages
                     var emailBody = TemplateHelper.RenderTemplate(
                         MVC.Views.Membership.Account.SignUp.AccountActivateEmail, emailModel);
 
-                    var message = new MailMessage();
-                    message.To.Add(email);
-                    message.Subject = emailSubject;
-                    message.Body = emailBody;
-                    message.IsBodyHtml = true;
-
-                    var client = new SmtpClient();
-
-                    if (client.DeliveryMethod == SmtpDeliveryMethod.SpecifiedPickupDirectory &&
-                        string.IsNullOrEmpty(client.PickupDirectoryLocation))
-                    {
-                        var pickupPath = Server.MapPath("~/App_Data");
-                        pickupPath = Path.Combine(pickupPath, "Mail");
-                        Directory.CreateDirectory(pickupPath);
-                        client.PickupDirectoryLocation = pickupPath;
-                    }
+                    Common.EmailHelper.Send(emailSubject, emailBody, email);
 
                     uow.Commit();
                     UserRetrieveService.RemoveCachedUser(userId, username);
-                    client.Send(message);
 
                     return new ServiceResponse();
                 }
@@ -126,7 +114,8 @@ namespace Serene.Membership.Pages
                 int userId;
                 try
                 {
-                    using (var ms = new MemoryStream(MachineKey.Unprotect(Convert.FromBase64String(t), "Activate")))
+                    var bytes = MachineKey.Unprotect(Convert.FromBase64String(t), "Activate");
+                    using (var ms = new MemoryStream(bytes))
                     using (var br = new BinaryReader(ms))
                     {
                         var dt = DateTime.FromBinary(br.ReadInt64());

@@ -1,12 +1,16 @@
 ﻿using Newtonsoft.Json;
 using Serenity;
+using Serenity.PropertyGrid;
 using Serenity.Reporting;
+using Serenity.Services;
 using Serenity.Web;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Mime;
 using System.Text;
 using System.Web;
+using System.Web.Hosting;
 using System.Web.Mvc;
 using System.Web.Security;
 
@@ -35,12 +39,7 @@ namespace Serene
                 throw new ArgumentOutOfRangeException("reportKey");
 
             if (reportInfo.Permission != null)
-            {
-                if (reportInfo.Permission == "")
-                    Authorization.ValidateLoggedIn();
-                else
-                    Authorization.ValidatePermission(reportInfo.Permission);
-            }
+                Authorization.ValidatePermission(reportInfo.Permission);
 
             var report = (IReport)JsonConvert.DeserializeObject(opt.TrimToNull() ?? "{}",
                 reportInfo.Type, JsonSettings.Tolerant);
@@ -118,10 +117,18 @@ namespace Serene
             renderUrl += "&print=1";
 
             var converter = new HtmlToPdfConverter();
+            var wkhtmlPath = HostingEnvironment.MapPath("~/bin/wkhtmltopdf.exe");
+            if (System.IO.File.Exists(wkhtmlPath))
+                converter.UtilityExePath = wkhtmlPath;
+            
             converter.Url = renderUrl;
             var formsCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
             if (formsCookie != null)
                 converter.Cookies[FormsAuthentication.FormsCookieName] = formsCookie.Value;
+
+            var languageCookie = Request.Cookies["LanguagePreference"];
+            if (languageCookie != null)
+                converter.Cookies["LanguagePreference"] = languageCookie.Value;
 
             var icustomize = report as ICustomizeHtmlToPdf;
             if (icustomize != null)
@@ -156,6 +163,12 @@ namespace Serene
             var html = TemplateHelper.RenderViewToString(designAttr.Design, viewData);
             renderedBytes = Encoding.UTF8.GetBytes(html);
             return null;
+        }
+
+        [HttpPost, JsonFilter]
+        public ActionResult Retrieve(ReportRetrieveRequest request)
+        {
+            return this.ExecuteMethod(() => new ReportRepository().Retrieve(request));
         }
     }
 }

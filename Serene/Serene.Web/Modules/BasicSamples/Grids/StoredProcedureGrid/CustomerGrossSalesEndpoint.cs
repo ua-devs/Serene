@@ -8,10 +8,10 @@
     using System.Data;
     using System.Web.Mvc;
     using MyRepository = Repositories.CustomerGrossSalesRepository;
-    using MyRow = Entities.CustomerGrossSalesRow;
+    using MyRow = Northwind.Entities.CustomerGrossSalesRow;
 
     [RoutePrefix("Services/BasicSamples/CustomerGrossSales"), Route("{action}")]
-    [ConnectionKey("Northwind"), ServiceAuthorize("Northwind:General")]
+    [ConnectionKey(typeof(MyRow)), ServiceAuthorize(typeof(MyRow))]
     public class CustomerGrossSalesController : ServiceEndpoint
     {
         public ListResponse<MyRow> List(IDbConnection connection, CustomerGrossSalesListRequest request)

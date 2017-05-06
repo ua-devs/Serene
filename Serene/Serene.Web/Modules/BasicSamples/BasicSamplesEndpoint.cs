@@ -12,13 +12,13 @@ namespace Serene.BasicSamples.Endpoints
     using System.Web.Mvc;
 
     [ServiceAuthorize, RoutePrefix("Services/BasicSamples/BasicSamples"), Route("{action}")]
-    [ConnectionKey("Northwind")]
+    [ConnectionKey(typeof(OrderRow))]
     public class BasicSamplesController : ServiceEndpoint
     {
         public OrdersByShipperResponse OrdersByShipper(IDbConnection connection, OrdersByShipperRequest request)
         {
             var fld = OrderRow.Fields;
-            var year = 1998; // as Northwind data is old, this is hardcoded, use DateTime.Today.Year for other tables
+            var year = DateTime.Today.Year;
             var startOfMonth = new DateTime(year, DateTime.Today.Month, 1);
             var startingFrom = startOfMonth.AddMonths(-11);
 
@@ -39,9 +39,10 @@ namespace Serene.BasicSamples.Endpoints
                     .GroupBy(fld.ShipVia)
                     .Where(
                         fld.OrderDate.IsNotNull() &
+                        fld.ShipVia.IsNotNull() &
                         fld.OrderDate < startOfMonth.AddMonths(1) &
                         fld.OrderDate >= startingFrom))
-                    .ToDictionary(x => new Tuple<int, int>(x.Month, x.ShipVia), x => (int)x.Count);
+                    .ToDictionary(x => new Tuple<int, int>((int)x.Month, (int)x.ShipVia), x => (int)x.Count);
 
             response.Values = new List<Dictionary<string, object>>();
             var month = startingFrom.Month;

@@ -7,11 +7,17 @@
     using System.Data.SqlClient;
     using System.IO;
     using System.Linq;
+    using System.Reflection;
     using System.Web.Hosting;
 
     public static partial class SiteInitialization
     { 
-        private static string[] databaseKeys = new[] { "Default", "Northwind" };
+        private static string[] databaseKeys = new[] {
+            "Default"
+            //<if:Northwind>
+            , "Northwind"
+            //</if:Northwind>
+        };
 
         /// <summary>
         /// Automatically creates a database for the template if it doesn't already exists.
@@ -21,13 +27,44 @@
         {
             var cs = SqlConnections.GetConnectionString(databaseKey);
 
-            if (cs.Dialect.GetType() == typeof(OracleDialect))
+            var serverType = cs.Dialect.ServerType;
+            bool isSql = serverType.StartsWith("SqlServer", StringComparison.OrdinalIgnoreCase);
+            bool isPostgres = !isSql & serverType.StartsWith("Postgres", StringComparison.OrdinalIgnoreCase);
+            bool isMySql = !isSql && !isPostgres && serverType.StartsWith("MySql", StringComparison.OrdinalIgnoreCase);
+            bool isSqlite = !isSql && !isPostgres && !isMySql && serverType.StartsWith("Sqlite", StringComparison.OrdinalIgnoreCase);
+            if (!isSql && !isPostgres && !isMySql && !isSqlite)
                 return;
 
             var cb = cs.ProviderFactory.CreateConnectionStringBuilder();
             cb.ConnectionString = cs.ConnectionString;
-
             string catalogKey = "?";
+
+            if (isSqlite)
+            {
+                catalogKey = "Data Source";
+                if (!cb.ContainsKey(catalogKey))
+                    return;
+
+                var dataFile = cb[catalogKey] as string;
+                if (string.IsNullOrEmpty(dataFile))
+                    return;
+
+                dataFile = dataFile.Replace("|DataDirectory|", HostingEnvironment.MapPath("~/App_Data/"));
+                if (File.Exists(dataFile))
+                    return;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(dataFile));
+                using (var sqliteConn = SqlConnections.New(cb.ConnectionString, cs.ProviderName))
+                {
+                    var createFile = ((WrappedConnection)sqliteConn).ActualConnection.GetType().GetMethod("CreateFile", BindingFlags.Static);
+                    if (createFile != null)
+                        createFile.Invoke(null, new object[] { dataFile });
+                }
+                    
+                SqlConnection.ClearAllPools();
+                return;
+            }
+            
             foreach (var ck in new[] { "Initial Catalog", "Database", "AttachDBFilename" })
                 if (cb.ContainsKey(ck))
                 {
@@ -66,13 +103,12 @@
                 string databasesQuery = "SELECT * FROM sys.databases WHERE NAME = @name";
                 string createDatabaseQuery = @"CREATE DATABASE [{0}]";
 
-                if (String.Equals(cs.ProviderName, "npgsql", StringComparison.OrdinalIgnoreCase))
+                if (isPostgres)
                 {
                     databasesQuery = "select * from postgres.pg_catalog.pg_database where datname = @name";
                     createDatabaseQuery = "CREATE DATABASE \"{0}\"";
                 }
-
-                if (String.Equals(cs.ProviderName, "MySql.Data.MySqlClient", StringComparison.OrdinalIgnoreCase))
+                else if (isMySql)
                 {
                     databasesQuery = "SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = @name";
                     createDatabaseQuery = "CREATE DATABASE `{0}`";
@@ -81,7 +117,8 @@
                 if (serverConnection.Query(databasesQuery, new { name = catalog }).Any())
                     return;
 
-                var isLocalServer = serverConnection.ConnectionString.IndexOf(@"(localdb)\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                var isLocalServer = isSql && 
+                    serverConnection.ConnectionString.IndexOf(@"(localdb)\", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     serverConnection.ConnectionString.IndexOf(@".\") >= 0;
 
                 string command;
@@ -111,7 +148,9 @@
             var cs = SqlConnections.GetConnectionString(databaseKey);
             var connection = cs.ConnectionString;
 
-            bool isOracle = cs.Dialect.GetType() == typeof(OracleDialect);
+            string serverType = cs.Dialect.ServerType;
+            bool isSqlServer = serverType.StartsWith("SqlServer", StringComparison.OrdinalIgnoreCase);
+            bool isOracle = !isSqlServer && serverType.StartsWith("Oracle", StringComparison.OrdinalIgnoreCase);
 
             // safety check to ensure that we are not modifying an arbitrary database.
             // remove these lines if you want Serene migrations to run on your DB.
@@ -122,13 +161,8 @@
                 return;
             }
 
-            string databaseType = "SqlServer";
-            if (String.Equals(cs.ProviderName, "npgsql", StringComparison.OrdinalIgnoreCase))
-                databaseType = "Postgres";
-            else if (String.Equals(cs.ProviderName, "MySql.Data.MySqlClient", StringComparison.OrdinalIgnoreCase))
-                databaseType = "MySql";
-            else if (isOracle)
-                databaseType = "OracleManaged";
+            string databaseType = isOracle ? "OracleManaged" : serverType;
+            var connectionString = cs.ConnectionString;
 
             using (var sw = new StringWriter())
             {
@@ -139,11 +173,12 @@
                 var runner = new RunnerContext(announcer)
                 {
                     Database = databaseType,
-                    Connection = cs.ConnectionString,
+                    Connection = connectionString,
                     Targets = new string[] { typeof(SiteInitialization).Assembly.Location },
                     Task = "migrate:up",
                     WorkingDirectory = Path.GetDirectoryName(typeof(SiteInitialization).Assembly.Location),
-                    Namespace = "Serene.Migrations." + databaseKey + "DB"
+                    Namespace = "Serene.Migrations." + databaseKey + "DB",
+                    Timeout = 90
                 };
 
                 try
@@ -155,8 +190,6 @@
                     throw new Exception("Error executing migration:\r\n" +
                         sw.ToString(), ex);
                 }
-
-                
             }
         }
     }
